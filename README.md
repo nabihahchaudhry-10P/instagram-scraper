@@ -17,6 +17,7 @@ conda activate instagram_scraper
 conda install requests
 conda install beautifulsoup4
 conda install pymongo
+conda install selenium=4.9.0
 ```
 
 ## Run the tool
@@ -27,6 +28,15 @@ python instagram_srcaper.py
 ```
 
 You will be prompted to enter the [keyword] in the terminal, this is the hashtag to be searched. Please note that the '#' symbol is not needed.
+
+
+## Using Jupyter Notebook
+
+```
+conda install -c anaconda jupyter
+jupyter notebook
+```
+
 
 ## Credits
 
