@@ -1,35 +1,51 @@
-import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 from pymongo import MongoClient
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 # Function to perform keyword-based search on Instagram
 def search_instagram(keyword):
-    base_url = 'https://www.instagram.com/explore/tags/'
-    url = base_url + keyword + '/'
-    response = requests.get(url)
-    if response.status_code == 200:
-        return response.text
-    else:
-        print(f"Failed to retrieve data from Instagram. Status code: {response.status_code}")
+    try:
+        base_url = 'https://www.instagram.com/explore/tags/'
+        url = base_url + keyword + '/'
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.get(url)
+        
+        # Wait to finish loading to get all dynamically-loaded content on webpage
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.TAG_NAME, "article"))
+        )
+
+        return driver.page_source
+    except Exception as e:
+        print(f"Error fetching posts:\n {e}")
         return None
 
 # Function to parse HTML and extract post data
 def extract_post_data(keyword, html):
     soup = BeautifulSoup(html, 'html.parser')
-    posts = []
-    for post in soup.find_all('body'):
-        post_data = {}
-        post_data['datetime'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        post_data['hashtag'] = keyword
-        img_element = post.find('img')
-        if img_element:
-            print("Image found!")
-            img_src = img_element['src']
-            post_data['image_url'] = img_src
-        # Additional data will be extracted: poster's info, URLs, number of shares, likes, views etc.
-        posts.append(post_data)
-    return posts
+    all_posts = []
+    rows = soup.find_all('div', class_='_ac7v')
+
+    for row in rows:
+        posts = row.find_all('a', class_='x1i10hfl')
+        for post in posts:
+            post_data = {}
+            post_data['datetime'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            post_data['hashtag'] = keyword
+            post_data['link'] = post['href']
+            post_data['img_text'] = post.find('img')['alt']
+            post_data['img_link'] = post.find('img')['src']
+            
+            all_posts.append(post_data)
+            
+    return all_posts
 
 def insert_into_mongodb(posts):
     try:
@@ -38,8 +54,9 @@ def insert_into_mongodb(posts):
         collection = db['posts']
         collection.insert_many(posts)
         client.close()
-    except:
-        print("Error occured while inserting Instagram data into MongoDB")
+        print("Data successfully stored in MongoDB.")
+    except Exception as e:
+        print(f"Error occurred while inserting Instagram data into MongoDB:\n {e}")
 
 def main():
     keyword = input("Enter a keyword to search on Instagram: ")
@@ -48,7 +65,6 @@ def main():
         posts = extract_post_data(keyword, html)
         if posts:
             insert_into_mongodb(posts)
-            print("Data successfully stored in MongoDB.")
         else:
             print("No posts found.")
     else:
