@@ -36,7 +36,8 @@ You will be prompted to enter the [keyword] in the terminal, this is the hashtag
 conda install -c anaconda jupyter
 jupyter notebook
 ```
-
+Jupyter notebook will open on localhost displayed your filesystem. Create a new notebook if one does not already exist and use as normal.
+(Note: Shift+Enter executes code in the cell)
 
 ## Credits
 
