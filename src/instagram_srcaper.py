@@ -1,4 +1,5 @@
 from bs4 import BeautifulSoup
+from logger import MyLogger
 from datetime import datetime
 from pymongo import MongoClient
 from selenium import webdriver

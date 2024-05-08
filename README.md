@@ -24,11 +24,10 @@ conda install selenium=4.9.0
 
 ```
 cd instagram-scraper
-python instagram_srcaper.py
+python <path_to_python_script>
 ```
 
 You will be prompted to enter the [keyword] in the terminal, this is the hashtag to be searched. Please note that the '#' symbol is not needed.
-
 
 ## Using Jupyter Notebook
 
@@ -36,9 +35,10 @@ You will be prompted to enter the [keyword] in the terminal, this is the hashtag
 conda install -c anaconda jupyter
 jupyter notebook
 ```
+
 Jupyter notebook will open on localhost displayed your filesystem. Create a new notebook if one does not already exist and use as normal.
 (Note: Shift+Enter executes code in the cell)
 
 ## Credits
 
-This project based on [Scrapstagram](https://github.com/xTEddie/Scrapstagram.gi). 
+This project based on [Scrapstagram](https://github.com/xTEddie/Scrapstagram.gi).
