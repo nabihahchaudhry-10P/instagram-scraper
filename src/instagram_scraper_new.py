@@ -1,18 +1,18 @@
-import time
 import datetime
-from logger import MyLogger
-from bs4 import BeautifulSoup
 from selenium import webdriver
 from pymongo import MongoClient
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.support import expected_conditions as EC
-
-BASE_URL = "https://www.instagram.com/explore/tags/"
-
+from logger import MyLogger
+from constants import MongoDB
+from constants import Messages
+from constants import Constants
 
 class Scraper:
+    """Instagram Crawler"""
     def __init__(self, keyword):
         chrome_options = Options()
         chrome_options.add_argument("--headless")
@@ -20,122 +20,139 @@ class Scraper:
         self.keyword = keyword
         self.logger = MyLogger()
 
-
     def search_instagram(self, max_page=10, max_post=1000):
+        """Search Instagram Posts"""
         start_dt = datetime.datetime.now()
-        url = BASE_URL + self.keyword + "/"
+        url = Constants.base_url.value + self.keyword + "/"
         self.driver.get(url)
 
         # Wait to finish loading to get all dynamically-loaded content on webpage
-        WebDriverWait(self.driver, 10).until(
-            EC.presence_of_all_elements_located((By.TAG_NAME, "a"))
+        WebDriverWait(self.driver, 5).until(
+            EC.presence_of_all_elements_located((By.TAG_NAME, "article"))
         )
 
-        # Extract post data
-        soup = BeautifulSoup(self.driver.page_source, "html.parser")
-        posts = list()
-        errors = 0
-
         # Get all IG pictures
-        elements = soup.find_all("a", class_="x1i10hfl")
+        posts = []
+        post_elements = self.driver.find_elements(By.CSS_SELECTOR, "article > div > div > div > div > div > a")
 
-        for element in elements:
+        # Extract post data
+        for post_element in post_elements:
             if len(posts) == max_post:
                 break
 
-            data = dict(
-                link=element["href"],
-                image=element.find("img")["src"],
-                text=element.find("img")["alt"],
-                datetime=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                hashtag=self.keyword,
-            )
+            data = {
+                "link": post_element.get_attribute("href"),
+                "image": post_element.find_element(By.TAG_NAME, "img").get_attribute("src"),
+                "text": post_element.find_element(By.TAG_NAME, "img").get_attribute("alt"),
+                "date_scraped": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "hashtag": self.keyword
+            }
 
             posts.append(data)
 
         for post in posts:
             # Go on IG picture link
-            self.driver.get(post["image"])
-            time.sleep(0.3)
-
             try:
-                element = self.driver.find_element(
-                    By.CSS_SELECTOR,
-                    "article > div > section > div"
+                self.driver.get(post["link"])
+
+                # Wait to finish loading to get all dynamically-loaded content on webpage
+                WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_all_elements_located((By.TAG_NAME, "article"))
                 )
-            except Exception as error:
-                self.logger.error(f"Error getting post image: {error}")
-                errors += 1
-                continue
 
-            try:
-                post["datetime"] = self.driver.find_element(
-                    By.TAG_NAME,
-                    "time"
-                ).get_attribute("datetime")
-            except Exception as error:
-                self.logger.error(f"Error getting post datetime: {error}")
-                pass
+                # Extracting additional post data
+                likes_component = self.driver.find_element(By.CSS_SELECTOR, "article > div > div > div > div > section > div")
+                try:
+                    likes_element = likes_component.find_element(By.CSS_SELECTOR, "div > div > span > a > span > span")
+                    post["likes"] = likes_element.text
+                except NoSuchElementException:
+                    post["likes"] = likes_component.text
 
-            # Count for like(s)/view(s)
-            try:
-                popularity_count = element.find_element(
-                    By.CSS_SELECTOR,
-                    "span > span"
-                ).text
-            except Exception as error:
-                self.logger.error(f"Error getting post popularity count {error}")
-                popularity_count = len(element.find_element(By.TAG_NAME, "a"))
+                time_element = self.driver.find_element(By.CSS_SELECTOR, "time.x1p4m5qa")
+                post["datetime"] = time_element.get_attribute("datetime")
+                post["datetime_text"] = time_element.text
 
-            # Save like(s)/view(s) and video url
-            try:
-                post["video"] = self.driver.find_element(
-                    By.TAG_NAME,
-                    "video"
-                ).get_attribute("src")
-                post["views"] = popularity_count
-            except Exception as error:
-                self.logger.error(f"Error getting post likes {error}")
-                post["likes"] = popularity_count
+                try:
+                    poster_profile_component = self.driver.find_element(By.CSS_SELECTOR, "article > div > div > div > div > div > header")
+                    poster_profile_element = poster_profile_component.find_element(By.CSS_SELECTOR, "div > div > div > div > div > span > a")
+                    post["poster"] = poster_profile_element.text
+                    post["poster_profile"] = poster_profile_element.get_attribute("href")
+                except NoSuchElementException:
+                    poster_profile_component = self.driver.find_element(By.CSS_SELECTOR, "header._aaqw")
+                    poster_profile_element = poster_profile_component.find_element(By.CSS_SELECTOR, "div > div > div > div > div > span > a")
+                    post["poster"] = poster_profile_element.text
+                    post["poster_profile"] = poster_profile_element.get_attribute("href")
 
-            print()
+                # Extracting comments under the post
+                comments_component = self.driver.find_element(By.CSS_SELECTOR, "ul._a9z6")
+                comments = comments_component.find_elements(By.CSS_SELECTOR, "div._a9zr")
+                post_comments = []
+
+                for comment in comments:
+                    post_comment = {}
+                    comment_time_element = comment.find_element(By.TAG_NAME, "time")
+                    post_comment["commented_at"] = comment_time_element.get_attribute("datetime")
+
+                    try:
+                        commentor_element = comment.find_element(By.TAG_NAME, "h2")
+                        comment_element = comment.find_element(By.CSS_SELECTOR, "div._a9zs")
+                        post_comment["commentor"] = commentor_element.text
+                        post_comment["commentor_profile"] = commentor_element.find_element(By.TAG_NAME, "a").get_attribute("href")
+                        post_comment["comment"] = comment_element.text
+
+                        post_comments.append(post_comment)
+
+                    except NoSuchElementException:
+                        commentor_element = comment.find_element(By.TAG_NAME, "h3")
+                        comment_element = comment.find_element(By.CSS_SELECTOR, "div._a9zs")
+                        post_comment["commentor"] = commentor_element.text
+                        post_comment["commentor_profile"] = commentor_element.find_element(By.TAG_NAME, "a").get_attribute("href")
+                        post_comment["comment"] = comment_element.text
+
+                        post_comments.append(post_comment)
+
+                post["comments"] = post_comments
+                post["comment_count"] = len(post_comments)
+
+            except Exception as error:
+                self.logger.error(Messages.ig_post_error.value.format(error))
+
 
         end_dt = datetime.datetime.now()
         time_diff = end_dt - start_dt
-        print(f"Total: {len(posts)} post(s)")
-        print(f"Total: {errors} error(s)")
-        print(f"Total: {time_diff.seconds} second(s)")
+        self.logger.info(Messages.total_posts.value.format(len(posts)))
+        self.logger.info(Messages.total_seconds.value.format(time_diff.seconds))
 
         return posts
 
     def insert_into_mongodb(self, posts):
+        """Insert Posts into MongoDB"""
         try:
-            client = MongoClient("mongodb://localhost:27017/")
-            data_base = client["instagram"]
-            collection = data_base["posts"]
+            client = MongoClient(MongoDB.base_url.value)
+            data_base = client[MongoDB.client.value]
+            collection = data_base[MongoDB.data.value]
             collection.insert_many(posts)
             client.close()
-            print("Data successfully stored in MongoDB.")
-            self.logger.info("Successfully added post(s) to the database")
+            self.logger.info(Messages.db_insertion_successfully.value)
         except Exception as error:
-            self.logger.error(f"Error adding post(s) to database: {error}")
-            print(f"Error occurred while inserting Instagram data into MongoDB:\n {error}")
+            self.logger.error(Messages.mongo_db_error.value.format(error))
 
     def get_posts(self):
-        print("Searching Instagram...\n")
+        """Get Posts from server"""
+        self.logger.info(Messages.search.value)
         try:
             posts = self.search_instagram(1, 9)
             if posts:
                 self.insert_into_mongodb(posts)
             else:
-                print("No posts found.")
+                self.logger.info(Messages.no_post_found.value)
         except Exception as error:
-            self.logger.error(f"Unable to get data from Instagram: {error}")
-            print(f"Unable to get data from Instagram: {error}")
+            self.logger.error(Messages.post_error.value.format(error))
 
 
 if __name__ == "__main__":
-    keyword = input("Enter a keyword to search on Instagram: ")
+    print(Messages.program_title.value)
+    keyword = input(Messages.input.value)
     instagram_scraper = Scraper(keyword)
 
     instagram_scraper.get_posts()
