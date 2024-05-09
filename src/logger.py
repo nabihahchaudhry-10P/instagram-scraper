@@ -1,8 +1,8 @@
 import logging
 
 class MyLogger:
-    def __init__(self, log_file='app.log', level=logging.DEBUG):
-        logging.basicConfig(filename=log_file, level=level, format='%(asctime)s - %(levelname)s - %(message)s')
+    def __init__(self, log_file='debug.log', level=logging.INFO):
+        logging.basicConfig(level=level, format='%(asctime)s [%(levelname)s] %(message)s', handlers=[logging.FileHandler(log_file), logging.StreamHandler()])
 
     def debug(self, message):
         logging.debug(message)
