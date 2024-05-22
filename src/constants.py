@@ -32,5 +32,5 @@ class MongoDB(Enum):
 
 @unique
 class UserCredentials(Enum):
-    username = 'marvelousman17@gmail.com'
-    password = 'Man_Cr77'
+    username = 'test'
+    password = 'test'
